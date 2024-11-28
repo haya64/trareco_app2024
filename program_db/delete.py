@@ -1,0 +1,1 @@
+# DELETE FROM train_images_colors;
