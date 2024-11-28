@@ -1,0 +1,70 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<POSTするために追加した class="container mt-4">
+    <h1>あなたが今行きたい観光地を選んでください</h1><br>
+
+    <h2>画像を選ぶ基準は自由です</h2>
+    <form action="{{ url_for('submit_selection_save') }}" method="post">
+        <div class="row row-cols-1 row-cols-md-3 g-4">
+            {% for image in images %}
+            <div class="col">
+                <div class="card h-100">
+                    <img src="{{ url_for('static', filename='images/' ~ image.path) }}" alt="Image"
+                        class="card-img-top img-fluid">
+                    <div class="card-body text-center">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="image" value="{{ image.id }}"
+                                id="imageCheck{{ image.id }}">
+                            <label class="form-check-label" for="imageCheck{{ image.id }}">
+                                選択
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="row mt-4">
+            <div class="col text-center">
+                <input type="submit" value="送信" class="btn btn-primary">
+            </div>
+        </div>
+    </form>
+
+    <!--POSTするために追加した-->
+    <script type="text/javascript">
+        document.getElementById('imageForm').addEventListener('submit', function (event) {
+            event.preventDefault(); // フォームのデフォルトの送信を防ぐ
+
+            // フォームデータを取得
+            var formData = new FormData(this);
+
+            // 選択された画像の数をカウント
+            var selectedImages = formData.getAll('image').length;
+
+            // 選択回数が3回に達した場合、submit_selectionにPOSTリクエストを送信
+            if (selectedImages >= 3) {
+                var redirectForm = document.createElement('form');
+                redirectForm.method = 'POST';
+                redirectForm.action = '{{ url_for("submit_selection") }}';
+
+                // フォームデータを追加
+                formData.forEach(function (value, key) {
+                    var input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = key;
+                    input.value = value;
+                    redirectForm.appendChild(input);
+                });
+
+                document.body.appendChild(redirectForm);
+                redirectForm.submit();
+            } else {
+                // 通常のフォーム送信
+                this.submit();
+            }
+        });
+    </script>
+</div>
+{% endblock %}
