@@ -1,5 +1,6 @@
 from trarecoapp import app
 from flask import render_template, request, session, redirect, url_for
+from flask_session import Session
 from .db import conect
 import random
 import numpy as np
@@ -7,6 +8,10 @@ from collections import defaultdict
 
 # セッションに使用するシークレットキーを設定
 app.secret_key = 'a_random_string_with_symbols_12345!@#$%'
+
+# セッションの設定
+app.config['SESSION_TYPE'] = 'filesystem'
+Session(app)
 
 @app.route('/')
 def index():
@@ -44,6 +49,12 @@ def show_image():
 @app.route('/submit_selection_save', methods=['POST'])
 def submit_selection_save():
     selected_images = request.form.getlist('image')
+
+    print(f"POSTデータ: {request.form}")  # POSTデータを確認
+    print(f"選択された画像: {selected_images}")  # デバッグ用
+    print(f"セッション: {session}")  # セッション全体を確認
+
+
     if 'selected_images' not in session:
         session['selected_images'] = selected_images
     else:
@@ -60,12 +71,12 @@ def submit_selection_save():
 
     # 3回選択したらsubmit_selectionにリダイレクト
     if session['selection_count'] >= 3:
-        # デバッグメッセージで選択された画像IDを全て出力
-        print(f"選択された画像ID: {session['selected_images']}")
-        # POSTリクエストを送信
-        return '''
+        selected_images_html = ''.join(
+            f'<input type="hidden" name="image" value="{image}">' for image in session['selected_images']
+        )
+        return f'''
         <form id="redirectForm" method="POST" action="/submit_selection">
-            <input type="hidden" name="redirect" value="true">
+            {selected_images_html}
         </form>
         <script type="text/javascript">
             document.getElementById("redirectForm").submit();
@@ -76,13 +87,16 @@ def submit_selection_save():
 
 
 
-
 @app.route('/submit_selection', methods=['GET', 'POST'])
 def submit_selection():
     if request.method == 'POST':
         # 選択した画像の色彩を抽出
         selected_image_ids = request.form.getlist('image')
         print(f"selected_image_ids: {selected_image_ids}")  # デバッグ用出力
+
+        if not selected_image_ids:
+            print("No images selected")
+            return redirect(url_for('index'))
 
         color_lists = []  # 入力ベクトル
 
@@ -104,249 +118,147 @@ def submit_selection():
         print('col2imp', col2imp)
 
         total_scores = {}
+        # 色彩ベクトルから感性ベクトルを生成し、感性スコアを累積
         for color_list in color_lists:
-            for mood, score in calculate_similarity(color_list, col2imp):
+            mood_scores = calculate_color_to_mood_similarity(color_list, col2imp)
+            for mood, score in mood_scores.items():
                 if mood not in total_scores:
                     total_scores[mood] = 0
                 total_scores[mood] += score
 
-        # 総類似度ランキング
+        # 感性ランキング
         sorted_total_scores = sorted(total_scores.items(), key=lambda x: x[1], reverse=True)
 
-        print("最終的な類似度ランキング:")
+        print("最終的な感性ランキング:")
         for mood, score in sorted_total_scores:
             print(f"{mood}: {score}")
 
         recommend_spots = recommend_spot(sorted_total_scores)
-        print(recommend_spots)
+        # print(recommend_spots)
 
         return render_template('trarecoapp/result.html', ranking=sorted_total_scores, recomend=recommend_spots)
     else:
         return redirect(url_for('index'))
     
+# 観光地の推薦関数
 def recommend_spot(sorted_total_scores):
-    # レコメンド観光地を取得
+    # 必要な観光地情報を取得
     select = conect.SELECTDATA()
-    columns = '*'
-    table = 'return_tourist_area'  # 正しいテーブル名を使用
+    columns = 'r_tourist_id, r_path, r_area_name, r_longitude, r_latitude, r_season_id, r_timezone_id, r_category_id'
+    table = 'return_tourist_area'
     tourist_spots = select.select(columns, table)
 
-    # 類似度計算
+    print(f"tourist_spots: {tourist_spots}")  # デバッグ用出力
+
+    # 観光地情報を辞書形式に変換（キーはr_tourist_id）
+    tourist_dict = {spot[0]: spot for spot in tourist_spots}
+
+    # ユーザーの感性ベクトル
+    user_mood_vector = {mood: score for mood, score in sorted_total_scores}
+
+    # 各観光地の感性ベクトルと類似度を計算
     similarity_scores = {}
-    for mood, score in sorted_total_scores:
-        for tourist_id, tourist_info in tourist_spots:
-            if tourist_id not in similarity_scores:
-                similarity_scores[tourist_id] = 0
-            similarity_scores[tourist_id] += score
+    for tourist_id, spot_info in tourist_dict.items():
+        # 色彩データを取得
+        where = f'tourist_id = {tourist_id}'
+        columns = '*'
+        table = 'colorhistgram'
+        color_data = select.select(columns, table, where)
 
-    # 最終ランキングの生成
-    sorted_scores = sorted(similarity_scores.items(), key=lambda item: item[1], reverse=True)
+        if not color_data:
+            print(f"No color data found for tourist_id: {tourist_id}")
+            continue
 
-    # ランキング結果をリスト形式で作成
+        # 色彩データを基に観光地の感性ベクトルを生成
+        color_vector = color_data[0][1:]  # 色彩データ (最初の列はIDなので除外)
+        columns = '*'
+        table = 'color2imp'
+        mood_vectors = select.select(columns, table)
+        spot_mood_vector = calculate_color_to_mood_similarity(color_vector, mood_vectors)
+
+        # ユーザー感性ベクトルとの類似度を計算
+        similarity_score = calculate_user_to_spot_similarity(user_mood_vector, spot_mood_vector)
+        similarity_scores[tourist_id] = similarity_score
+
+    # 類似度スコアを降順にソート
+    sorted_scores = sorted(similarity_scores.items(), key=lambda x: x[1], reverse=True)
+
+    # ランキング結果を作成
     ranking_results = []
     for tourist_id, score in sorted_scores:
-        spot_info = next((spot for spot in tourist_spots if spot[0] == tourist_id), None)
-        if spot_info is not None:
-            spot_name = spot_info[2]
-            image_path = spot_info[1]
-            ranking_results.append([spot_name, image_path, score])
-        else:
-            print(f"No tourist spot found for tourist_id: {tourist_id}")
+        if tourist_id in tourist_dict:
+            spot_info = tourist_dict[tourist_id]
+            ranking_results.append({
+                'id': spot_info[0],
+                'name': spot_info[2],
+                'image_path': spot_info[1],
+                'longitude': spot_info[3],
+                'latitude': spot_info[4],
+                'score': score
+            })
 
-    # デバッグ用出力
-    print(f"ランキング結果: {ranking_results}")
-
+    # ランキング結果のデバッグ出力
+    print("ランキング結果（ID、名前、スコア）:")
+    for spot in ranking_results:
+        print(f"ID: {spot['id']}, 名前: {spot['name']}, スコア: {spot['score']}")
     return ranking_results
 
-def calculate_similarity(input_vector, mood_vectors):
-    # 入力ベクトルのNumPy配列
-    input_array = np.array(input_vector)
 
-    # 結果を保存するリスト
-    similarity_scores = []
+# 色彩と感性の関連度を計算する関数
+def calculate_color_to_mood_similarity(color_vector, mood_vectors):
+    """
+    色彩ベクトルと感性ベクトルの関連度を計算。
 
-    # 各感性ベクトルとの内積を計算
+    Parameters:
+        color_vector (list): 色彩データのベクトル。
+        mood_vectors (list): 感性データのベクトルリスト [(id, name, *values)]。
+
+    Returns:
+        dict: 感性名とスコアの辞書。
+    """
+    input_array = np.array(color_vector)
+    similarity_scores = {}
     for mood_vector in mood_vectors:
         mood_id, mood_name, *mood_values = mood_vector
         mood_array = np.array(mood_values)
         similarity = np.dot(input_array, mood_array)
-        similarity_scores.append((mood_name, similarity))
+        similarity_scores[mood_name] = similarity
     return similarity_scores
 
-'''
-@app.route('/submit_selection', methods=['GET', 'POST'])
-def submit_selection():
-    if request.method == 'POST' or 'selected_images' in session:
-        # 選択した画像の色彩を抽出
-        selected_image_ids = session.get('selected_images', [])
-        print(f"selected_image_ids: {selected_image_ids}")  # デバッグ用出力
 
-        color_lists = get_color_lists(selected_image_ids)
-        print(f"color_lists: {color_lists}")  # デバッグ用出力
+# ユーザー感性ベクトルと観光地感性ベクトルの類似度を測る関数
+def calculate_user_to_spot_similarity(user_mood_vector, spot_mood_vector):
+    """
+    ユーザー感性ベクトルと観光地感性ベクトルの類似度を計算。
 
-        sensibility_scores = get_sensibility_scores(color_lists)
+    Parameters:
+        user_mood_vector (dict): ユーザー感性ベクトル（感性名とスコアの辞書）。
+        spot_mood_vector (dict): 観光地感性ベクトル（感性名とスコアの辞書）。
 
-        # 類似度計算
-        user_vectors = list(zip(sensibility_scores.keys(), sensibility_scores.values()))
-        print(f"user_vectors: {user_vectors}")  # デバッグ用出力
-
-        # 推薦結果を取得
-        ranking_results = recommend_spot(user_vectors)
-
-        return render_template('trarecoapp/result.html', recommended_spots=ranking_results)
-    else:
-        return redirect(url_for('index'))
-
-def recommend_spot(user_vectors):
-    # レコメンド観光地を取得
-    select = conect.SELECTDATA()
-    columns = '*'
-    table = 'return_tourist_area'  # 正しいテーブル名を使用
-    tourist_spots = select.select(columns, table)
-
-    # レコメンド観光地の色彩を取得
-    columns = '*'
-    table = 'colorhistgram'
-    tourist_colors = select.select(columns, table)
-
-    # 感性と色彩のスコア計算
-    sensibility_scores = get_sensibility_scores(tourist_colors)
-
-    # 類似度計算
-    similarity_scores = {}
-    for tourist_id, scores in sensibility_scores.items():
-        similarity = 0
-        for sensibility, user_score in user_vectors:
-            if isinstance(scores, dict):
-                similarity += user_score * scores.get(sensibility, 0)
-            else:
-                similarity += user_score * scores
-        similarity_scores[tourist_id] = similarity
-
-        # デバッグ用出力
-        print(f"観光地ID: {tourist_id}, 類似度スコア: {similarity}")
-
-    # 最終ランキングの生成
-    sorted_scores = sorted(similarity_scores.items(), key=lambda item: item[1], reverse=True)
-
-    # ランキング結果をリスト形式で作成
-    ranking_results = []
-    for tourist_id, score in sorted_scores:
-        spot_info = next((spot for spot in tourist_spots if spot[0] == tourist_id), None)
-        if spot_info is not None:
-            spot_name = spot_info[2]
-            image_path = spot_info[1]
-            ranking_results.append([spot_name, image_path, score])
-        else:
-            print(f"No tourist spot found for tourist_id: {tourist_id}")
+    Returns:
+        float: 類似度スコア（例: コサイン類似度）。
+    """
+    # 共通の感性を使用してベクトル化
+    common_keys = set(user_mood_vector.keys()) & set(spot_mood_vector.keys())
+    user_array = np.array([user_mood_vector[key] for key in common_keys])
+    spot_array = np.array([spot_mood_vector[key] for key in common_keys])
 
     # デバッグ用出力
-    print(f"ランキング結果: {ranking_results}")
+    print("=== デバッグ: 感性ベクトル比較 ===")
+    print(f"ユーザー感性ベクトル (共通): {user_array}")
+    print(f"観光地感性ベクトル (共通): {spot_array}")
+    print(f"共通の感性キー: {common_keys}")
 
-    return ranking_results
+    # コサイン類似度の計算
+    norm_user = np.linalg.norm(user_array)
+    norm_spot = np.linalg.norm(spot_array)
+    if norm_user == 0 or norm_spot == 0:
+        return 0.0
+    similarity = np.dot(user_array, spot_array) / (norm_user * norm_spot)
 
-# 内積計算とソートを行う関数
-def calculate_similarity(input_vector, mood_vectors):
-    # 入力ベクトルのNumPy配列
-    input_array = np.array(input_vector)
+    # デバッグ用出力
+    print(f"計算された類似度スコア: {similarity}")
+    print("================================")
 
-    # 結果を保存するリスト
-    similarity_scores = []
+    return similarity
 
-    # 各感性ベクトルとの内積を計算
-    for mood_vector in mood_vectors:
-        mood_id, mood_name, *mood_values = mood_vector
-        mood_array = np.array(mood_values)
-        similarity = np.dot(input_array, mood_array)
-        similarity_scores.append((mood_name, similarity))
-    return similarity_scores
-
-# 画像の色彩データを取得
-def get_color_lists(selected_image_ids):
-    color_lists = []  # 入力ベクトル
-    select = conect.SELECTDATA()
-    columns = '*'
-    table = 'colorhistgram'
-    for id in selected_image_ids:
-        where = f'tourist_id = {id}'
-        colors = select.select(columns, table, where)
-        print(f"colors for tourist_id {id}: {colors}")  # デバッグ用出力
-        if colors:
-            colors = colors[0][1:]
-            color_lists.append(colors)
-        else:
-            print(f"No colors found for tourist_id: {id}")  # デバッグ用出力
-    return color_lists
-
-# 画像と感性のスコアを計算
-def get_sensibility_scores(color_lists):
-    select = conect.SELECTDATA()
-    columns = '*'
-    table = 'color2imp'
-    sensibility_weights = select.select(columns, table)
-
-    sensibility_scores = defaultdict(dict)
-    for colors in color_lists:
-        for sensibility in sensibility_weights:
-            sensibility_name = sensibility[1]
-            weights = sensibility[2:]
-            score = sum(c * w for c, w in zip(colors, weights))
-            sensibility_scores[sensibility_name] = score
-
-    print(f"sensibility_scores: {sensibility_scores}")  # デバッグ用出力
-    return sensibility_scores
-'''
-
-'''
-# 選択された画像IDから感性を推定し、観光地を推薦
-@app.route('/submit_selection', methods=['GET','POST'])
-def submit_selection():
-
-    # 選択した画像の色彩を抽出
-    selected_image_ids = request.form.getlist('image')
-    print(f"selected_image_ids: {selected_image_ids}")  # デバッグ用出力
-
-    color_lists = [] # 入力ベクトル
-
-    select = conect.SELECTDATA()
-    columns = '*'
-    table = 'colorhistgram'
-    for id in selected_image_ids:
-        where = f'tourist_id = {id}'
-        colors = select.select(columns, table, where)
-        colors = colors[0][1:]
-        color_lists.append(colors)
-
-    # 感性と色彩の対応表を取得
-    select = conect.SELECTDATA()
-    columns = '*'
-    table = 'color2imp'
-    col2imp = select.select(columns, table) # 感性ベクトル
-
-    
-    
-    
-    print('color_list', color_lists)
-    print('col2imp', col2imp)
-
-    total_scores = {}
-    for color_list in color_lists:
-        for mood, score in calculate_similarity(color_list, col2imp):
-            if mood not in total_scores:
-                total_scores[mood] = 0
-            total_scores[mood] += score
-
-    # 総類似度ランキング
-    sorted_total_scores = sorted(total_scores.items(), key=lambda x: x[1], reverse=True)
-
-    print("最終的な類似度ランキング:")
-    for mood, score in sorted_total_scores:
-        print(f"{mood}: {score}")
-
-    
-    recommend_spots = recommend_spot(sorted_total_scores)
-    print(recommend_spots)
-
-
-    return render_template('trarecoapp/ranking.html', ranking=sorted_total_scores, recomend=recommend_spots)
-'''

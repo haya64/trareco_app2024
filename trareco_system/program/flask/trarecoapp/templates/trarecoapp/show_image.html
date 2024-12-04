@@ -5,7 +5,7 @@
     <h1>あなたが今行きたい観光地を選んでください</h1><br>
 
     <h2>画像を選ぶ基準は自由です</h2>
-    <form action="{{ url_for('submit_selection_save') }}" method="post">
+    <form id="imageForm" action="{{ url_for('submit_selection_save') }}" method="post">
         <div class="row row-cols-1 row-cols-md-3 g-4">
             {% for image in images %}
             <div class="col">
@@ -43,6 +43,8 @@
             // 選択された画像の数をカウント
             var selectedImages = formData.getAll('image').length;
 
+            console.log("選択された画像の数:", selectedImages); // デバッグ用
+
             // 選択回数が3回に達した場合、submit_selectionにPOSTリクエストを送信
             if (selectedImages >= 3) {
                 var redirectForm = document.createElement('form');
@@ -66,5 +68,5 @@
             }
         });
     </script>
-</div>
-{% endblock %}
+    </div>
+    {% endblock %}
