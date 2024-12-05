@@ -177,7 +177,8 @@ def recommend_spot(sorted_total_scores):
         spot_mood_vector = calculate_color_to_mood_similarity(color_vector, mood_vectors)
 
         # ユーザー感性ベクトルとの類似度を計算
-        similarity_score = calculate_user_to_spot_similarity(user_mood_vector, spot_mood_vector)
+        spot_name = spot_info[2]
+        similarity_score = calculate_user_to_spot_similarity(user_mood_vector, spot_mood_vector, spot_name)
         similarity_scores[tourist_id] = similarity_score
 
     # 類似度スコアを降順にソート
@@ -227,7 +228,7 @@ def calculate_color_to_mood_similarity(color_vector, mood_vectors):
 
 
 # ユーザー感性ベクトルと観光地感性ベクトルの類似度を測る関数
-def calculate_user_to_spot_similarity(user_mood_vector, spot_mood_vector):
+def calculate_user_to_spot_similarity(user_mood_vector, spot_mood_vector, spot_name='unknown spot'):
     """
     ユーザー感性ベクトルと観光地感性ベクトルの類似度を計算。
 
@@ -245,6 +246,7 @@ def calculate_user_to_spot_similarity(user_mood_vector, spot_mood_vector):
 
     # デバッグ用出力
     print("=== デバッグ: 感性ベクトル比較 ===")
+    print(f"観光地: {spot_name}")
     print(f"ユーザー感性ベクトル (共通): {user_array}")
     print(f"観光地感性ベクトル (共通): {spot_array}")
     print(f"共通の感性キー: {common_keys}")
