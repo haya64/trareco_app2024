@@ -1,3 +1,4 @@
+-- 感性推定のためにユーザに選んでもらう観光地情報
 INSERT INTO tourist_area (path, area_name, longitude, latitude, season_id, timezone_id, category_id) VALUES
 	('山_1_冬_夜.jpg', '立山', '36.584550', '137.614098', '4', '2', '1'),
 	('山_1_冬_昼.jpg', '立山', '36.584550', '137.614098', '4', '1', '1'),
@@ -49,7 +50,7 @@ INSERT INTO tourist_area (path, area_name, longitude, latitude, season_id, timez
 	('神社_2_秋_昼.jpg', '金閣寺', '35.039628', '135.729288', '3', '1', '3');
 	
 	
-
+-- それぞれの観光地の色彩ヒストグラム
 INSERT INTO colorhistgram (red, orange, yellow, green, blue, indigo, purple, black, gray, white) VALUES
 	('0', '81', '0', '0', '2', '65421', '6312', '15086', '153063', '35'),
 	('0', '132581', '0', '0', '0', '9686', '63012', '10330', '24073', '318'),
@@ -99,7 +100,8 @@ INSERT INTO colorhistgram (red, orange, yellow, green, blue, indigo, purple, bla
 	('0', '56449', '150', '0', '15', '23947', '58656', '16804', '80994', '2985'),
 	('0', '5041', '10', '0', '173', '4770', '6670', '194061', '28679', '596'),
 	('68', '48256', '3', '0', '991', '27932', '51367', '16366', '79450', '15567');
-	
+
+-- 観光地の季節
 INSERT INTO season (season_id, season) 
 VALUES
 (1, '春'),
@@ -107,17 +109,20 @@ VALUES
 (3, '秋'),
 (4, '冬');
 
+-- 観光地の時間帯
 INSERT INTO timezone (timezone_id, timezone) 
 VALUES
 (1, '朝昼'),
 (2, '夜');
 
+-- 観光地のカテゴリー
 INSERT INTO category (category_id, category) 
 VALUES
 (1, '山'),
 (2, '温泉'),
 (3, '神社');
 
+-- 感性語と色彩の対応表
 INSERT INTO color2imp (imp_name, red, orange, yellow, green, blue, indigo, purple, black, gray, white) VALUES
 	('楽しい', '8', '10', '9', '6', '5', '3', '4', '1', '2', '7'),
 	('賑やかな', '10', '9', '8', '3', '5', '4', '6', '1', '2', '7'),
@@ -137,7 +142,7 @@ INSERT INTO color2imp (imp_name, red, orange, yellow, green, blue, indigo, purpl
 	
 
 
-
+-- その他の感性による重みづけ
 INSERT INTO imp_weight (season_spring, season_summer, season_fall, season_winter, time_morning2noon, time_night, category_mountain, category_hotspring, category_temple) VALUES
 	('1', '2', '1', '1', '2', '1', '1', '2', '1'),
 	('2', '2', '1', '1', '2', '1', '1', '2', '1'),
@@ -155,7 +160,7 @@ INSERT INTO imp_weight (season_spring, season_summer, season_fall, season_winter
 	('1', '1', '2', '1', '1', '1', '2', '2', '1'),
 	('1', '1', '2', '2', '1', '1', '1', '2', '1');
 
-
+-- 推薦用の観光地情報
 INSERT INTO return_tourist_area (r_path, r_area_name, r_longitude, r_latitude, r_season_id, r_timezone_id, r_category_id) VALUES
 	('下呂温泉.jpg', '下呂温泉', '35.361393', '138.727191', '1', '2', '2'),
 	('道後温泉.jpg', '道後温泉', '35.714875', '139.796507', '3', '2', '2'),
@@ -164,6 +169,7 @@ INSERT INTO return_tourist_area (r_path, r_area_name, r_longitude, r_latitude, r
 	('富士山.jpg', '富士山', '35.809520', '137.238344', '4', '1', '1'),
 	('筑波山.jpg', '筑波山', '34.332482', '132.351163', '2', '1', '1');
 
+-- 推薦用の観光地情報の色彩ヒストグラム
 INSERT INTO return_colorhistgram (r_red, r_orange, r_yellow, r_green, r_blue, r_indigo, r_purple, r_black, r_gray, r_white) VALUES
 	('1', '10067', '17', '2', '227', '21129', '38863', '81402', '87402', '890'),
 	('195', '20310', '566', '15', '6804', '23618', '68042', '52934', '67087', '429'),
