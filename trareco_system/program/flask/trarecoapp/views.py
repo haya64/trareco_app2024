@@ -5,6 +5,8 @@ from .db import conect
 import random
 import numpy as np
 from collections import defaultdict
+import math
+
 
 # セッションに使用するシークレットキーを設定
 app.secret_key = 'a_random_string_with_symbols_12345!@#$%'
@@ -171,15 +173,26 @@ def submit_selection():
 
 
 # 推薦観光地のランキングを生成
-def recommend_spot(sorted_total_scores, average_crowding, weather_id, timezone_id):
+def recommend_spot(
+    sorted_total_scores,
+    average_crowding,
+    weather_id,
+    timezone_id,
+    user_lat=35.681236,  # デフォルト値: 東京駅の緯度
+    user_lon=139.767125, # デフォルト値: 東京駅の経度
+    speed_kmh=60         # デフォルト値: 60km/h
+):
     """
-    観光地の推薦リストを作成し、混雑度・天気・時間帯で絞り込みを行う。
+    観光地の推薦リストを作成し、混雑度・天気・時間帯・移動時間を考慮。
 
     Parameters:
         sorted_total_scores (list): ユーザーの感性ベクトルランキング。
         average_crowding (float): ユーザーが選択した画像の平均混雑度。
         weather_id (int): 判定された天気ID。
         timezone_id (int): 判定された時間帯ID。
+        user_lat (float): ユーザーの緯度（デフォルト: 東京駅）。
+        user_lon (float): ユーザーの経度（デフォルト: 東京駅）。
+        speed_kmh (float): 移動速度（km/h、デフォルト: 60）。
 
     Returns:
         list: 推薦観光地のランキング結果。
@@ -251,15 +264,32 @@ def recommend_spot(sorted_total_scores, average_crowding, weather_id, timezone_i
         filtered_results = filter_recommendations_by_weather(filtered_results, weather_id)
 
         # 時間帯による絞り込みを実行
-        final_results = filter_recommendations_by_timezone(filtered_results, timezone_id)
+        filtered_results = filter_recommendations_by_timezone(filtered_results, timezone_id)
+
+        # 移動時間の計算を実行
+        final_results = calculate_travel_time((user_lat, user_lon), filtered_results, speed_kmh)
+
+        # デバッグ用に移動時間を出力
+        # デバッグ用に移動時間を出力
+        print("=== 絞り込まれた観光地とその詳細情報 ===")
+        for spot in final_results:
+            print(f"観光地名: {spot['name']}")
+            print(f"画像パス: {spot['image_path']}")
+            print(f"緯度: {spot['latitude']}, 経度: {spot['longitude']}")
+            print(f"混雑度: {spot['crowding']}")
+            print(f"天気ID: {spot['weather']}")
+            print(f"時間帯ID: {spot['timezone']}")
+            print(f"類似度スコア: {spot['score']:.2f}")
+            print(f"距離: {spot['distance_km']} km")
+            print(f"移動時間: {spot['travel_time_hr']} 時間")
+            print("-" * 40)
+
 
         return final_results
 
     except Exception as e:
         print(f"エラーが発生しました: {e}")
-        return []    
-
-
+        return []
 
 
 
@@ -512,3 +542,54 @@ def filter_recommendations_by_timezone(recommendations, timezone_id):
 
     print(f"時間帯条件（ID: {timezone_id}）による絞り込み後の推薦観光地数: {len(filtered)} / {len(recommendations)}")
     return filtered
+
+# 移動時間計算
+def calculate_travel_time(user_location, tourist_spots, speed_kmh=60):
+    """
+    観光地との移動時間を計算。
+
+    Parameters:
+        user_location (tuple): ユーザーの現在地 (latitude, longitude)。
+        tourist_spots (list of dict): 観光地情報のリスト。各観光地は辞書形式で含む (id, name, latitude, longitude, ...)。
+        speed_kmh (float): 移動速度 (km/h)。
+
+    Returns:
+        list: 観光地情報に移動時間と距離を追加したリスト。
+    """
+    R = 6371  # 地球の半径 (km)
+    user_lat, user_lon = map(float, user_location)  # 緯度・経度をfloat型に変換
+    user_lat_rad = math.radians(user_lat)
+    user_lon_rad = math.radians(user_lon)
+
+    results = []
+    for spot in tourist_spots:
+        try:
+            # 緯度・経度の取得と変換
+            spot_lat = float(spot['latitude'])
+            spot_lon = float(spot['longitude'])
+            spot_lat_rad = math.radians(spot_lat)
+            spot_lon_rad = math.radians(spot_lon)
+
+            # 緯度・経度の差を計算
+            delta_lat = spot_lat_rad - user_lat_rad
+            delta_lon = spot_lon_rad - user_lon_rad
+
+            # 大円距離を計算
+            a = (math.sin(delta_lat / 2) ** 2 +
+                 math.cos(user_lat_rad) * math.cos(spot_lat_rad) * math.sin(delta_lon / 2) ** 2)
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+            distance = R * c  # 距離 (km)
+
+            # 移動時間を計算
+            travel_time = distance / speed_kmh  # 時間 (h)
+
+            # 結果をリストに追加
+            results.append({
+                **spot,
+                'distance_km': round(distance, 2),
+                'travel_time_hr': round(travel_time, 2),
+            })
+        except Exception as e:
+            print(f"エラー: 観光地データが不正です: {spot} - {e}")
+
+    return results

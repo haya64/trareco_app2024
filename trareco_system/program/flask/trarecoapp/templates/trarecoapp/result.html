@@ -35,6 +35,8 @@
                 <div class="card-body">
                     <h5 class="card-title">{{ loop.index }}. {{ spot.name }}</h5>
                     <p class="card-text">類似度スコア: {{ spot.score }}</p>
+                    <p class="card-text">移動時間: {{ spot.travel_time_hr }} 時間</p>
+                    <p class="card-text">距離: {{ spot.distance_km }} km</p>
                 </div>
             </div>
         </div>
