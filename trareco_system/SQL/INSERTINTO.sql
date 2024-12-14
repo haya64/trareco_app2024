@@ -174,7 +174,7 @@ INSERT INTO return_tourist_area (r_path, r_area_name, r_longitude, r_latitude, r
 	('厳島神社.jpg', '厳島神社', '36.226062', '140.106977', '4', '1', '3', '0', '1'),
 	('浅草寺.jpg', '浅草寺', '33.852041', '132.786631', '4', '2', '3', '0', '1'),
 	('富士山.jpg', '富士山', '35.809520', '137.238344', '4', '1', '1', '0', '1'),
-	('筑波山.jpg', '筑波山', '34.332482', '132.351163', '2', '1', '1', '0', '1');
+	('筑波山.jpg', '筑波山', '34.332482', '132.351163', '2', '1', '1', '0.05', '1');
 
 -- 推薦用の観光地情報の色彩ヒストグラム
 INSERT INTO return_colorhistgram (r_red, r_orange, r_yellow, r_green, r_blue, r_indigo, r_purple, r_black, r_gray, r_white) VALUES

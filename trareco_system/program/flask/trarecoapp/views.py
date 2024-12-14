@@ -155,9 +155,10 @@ def submit_selection():
             for mood, score in sorted_total_scores:
                 print(f"{mood}: {score}")
 
-            # 推薦観光地を取得
-            recommend_spots = recommend_spot(sorted_total_scores)
+            # 推薦観光地を取得（修正: average_crowding を渡す）
+            recommend_spots = recommend_spot(sorted_total_scores, average_crowding, weather_id, timezone_id)
             print(f"推薦観光地: {recommend_spots}")
+
 
             return render_template('trarecoapp/result.html', ranking=sorted_total_scores, recomend=recommend_spots)
 
@@ -169,22 +170,24 @@ def submit_selection():
         return redirect(url_for('index'))
 
 
-# 観光地の推薦関数
-def recommend_spot(sorted_total_scores):
+# 推薦観光地のランキングを生成
+def recommend_spot(sorted_total_scores, average_crowding, weather_id, timezone_id):
     """
-    観光地の推薦リストを作成
+    観光地の推薦リストを作成し、混雑度・天気・時間帯で絞り込みを行う。
 
     Parameters:
         sorted_total_scores (list): ユーザーの感性ベクトルランキング。
+        average_crowding (float): ユーザーが選択した画像の平均混雑度。
+        weather_id (int): 判定された天気ID。
+        timezone_id (int): 判定された時間帯ID。
 
     Returns:
         list: 推薦観光地のランキング結果。
     """
-    # 必要な観光地情報を取得
     select = conect.SELECTDATA()
     try:
         # 観光地情報を取得
-        columns = 'r_tourist_id, r_path, r_area_name, r_longitude, r_latitude, r_season_id, r_timezone_id, r_category_id'
+        columns = 'r_tourist_id, r_path, r_area_name, r_longitude, r_latitude, r_season_id, r_timezone_id, r_category_id, r_crowding, r_weather'
         table = 'return_tourist_area'
         tourist_spots = select.select(columns, table)
 
@@ -192,16 +195,12 @@ def recommend_spot(sorted_total_scores):
             print("No tourist spots found in the database.")
             return []
 
-        print(f"tourist_spots: {tourist_spots}")  # デバッグ用出力
-
-        # 観光地情報を辞書形式に変換（キーはr_tourist_id）
+        # 観光地情報を辞書形式に変換
         tourist_dict = {spot[0]: spot for spot in tourist_spots}
 
         # 色彩データを一括取得
         color_histogram_data = select.select('*', 'return_colorhistgram')
         color_dict = {row[0]: row[1:] for row in color_histogram_data}
-
-        print(f"color_histogram_data: {color_dict}")  # デバッグ用
 
         # 感性ベクトルを取得
         mood_vectors = select.select('*', 'color2imp')
@@ -212,48 +211,56 @@ def recommend_spot(sorted_total_scores):
         # 各観光地の感性ベクトルと類似度を計算
         similarity_scores = {}
         for tourist_id, spot_info in tourist_dict.items():
-            # 色彩データを取得
             if tourist_id not in color_dict:
                 print(f"No color data found for r_tourist_id: {tourist_id}")
                 continue
 
             color_vector = color_dict[tourist_id]
-
-            # 色彩データから感性ベクトルを生成
             spot_mood_vector = calculate_color_to_mood_similarity(color_vector, mood_vectors)
 
-            # ユーザー感性ベクトルとの類似度を計算
-            spot_name = spot_info[2]
-            similarity_score = calculate_user_to_spot_similarity(user_mood_vector, spot_mood_vector, spot_name)
+            similarity_score = calculate_user_to_spot_similarity(
+                user_mood_vector, spot_mood_vector, spot_info[2]
+            )
             similarity_scores[tourist_id] = similarity_score
 
         # 類似度スコアを降順にソート
         sorted_scores = sorted(similarity_scores.items(), key=lambda x: x[1], reverse=True)
 
         # ランキング結果を作成
-        ranking_results = []
-        for tourist_id, score in sorted_scores:
-            if tourist_id in tourist_dict:
-                spot_info = tourist_dict[tourist_id]
-                ranking_results.append({
-                    'id': spot_info[0],
-                    'name': spot_info[2],
-                    'image_path': spot_info[1],
-                    'longitude': spot_info[3],
-                    'latitude': spot_info[4],
-                    'score': score
-                })
+        ranking_results = [
+            {
+                'id': tourist_dict[tourist_id][0],
+                'name': tourist_dict[tourist_id][2],
+                'image_path': tourist_dict[tourist_id][1],
+                'longitude': tourist_dict[tourist_id][3],
+                'latitude': tourist_dict[tourist_id][4],
+                'crowding': tourist_dict[tourist_id][8],  # 混雑度
+                'weather': tourist_dict[tourist_id][9],   # 天気ID
+                'timezone': tourist_dict[tourist_id][6], # 時間帯ID
+                'score': score
+            }
+            for tourist_id, score in sorted_scores
+        ]
 
-        # ランキング結果のデバッグ出力
-        print("ランキング結果（ID、名前、スコア）:")
-        for spot in ranking_results:
-            print(f"ID: {spot['id']}, 名前: {spot['name']}, スコア: {spot['score']}")
+        print(f"ランキング結果: {len(ranking_results)} 件生成")
 
-        return ranking_results
+        # 混雑度による絞り込みを実行
+        filtered_results = filter_recommendations_by_crowding(ranking_results, average_crowding)
 
-    finally:
-        # データベース接続のクローズ
-        select.close()
+        # 天気による絞り込みを実行
+        filtered_results = filter_recommendations_by_weather(filtered_results, weather_id)
+
+        # 時間帯による絞り込みを実行
+        final_results = filter_recommendations_by_timezone(filtered_results, timezone_id)
+
+        return final_results
+
+    except Exception as e:
+        print(f"エラーが発生しました: {e}")
+        return []    
+
+
+
 
 
 def calculate_color_to_mood_similarity(color_vector, mood_vectors):
@@ -428,3 +435,80 @@ def determine_timezone(selected_image_ids, db_connection):
 
     print("最終的に判定された時間帯ID: None")
     return None
+
+
+def filter_recommendations_by_crowding(recommendation_spots, average_crowding):
+    """
+    混雑度に基づいて推薦観光地を絞り込む。
+
+    Parameters:
+        recommendation_spots (list): 推薦観光地情報のリスト（各観光地は辞書形式）。
+        average_crowding (float): ユーザーが選択した画像の平均混雑度。
+
+    Returns:
+        list: 混雑度条件を満たす推薦観光地リスト。
+    """
+    Tco = 0.02  # 混雑度の閾値
+
+    # 混雑を許容するかどうかを判定
+    allow_crowding = average_crowding > Tco
+    print(f"混雑許容判定: {'許容する' if allow_crowding else '許容しない'} (平均混雑度: {average_crowding})")
+
+    filtered_spots = []
+
+    for spot in recommendation_spots:
+        crowding = spot.get('crowding', 0.0)  # 推薦観光地の混雑度を取得
+
+        if allow_crowding:
+            # 混雑を許容する場合、すべての観光地を含める
+            filtered_spots.append(spot)
+        else:
+            # 混雑を許容しない場合、混雑度が閾値以下の観光地を含める
+            if crowding <= Tco:
+                filtered_spots.append(spot)
+
+    # デバッグ用出力
+    print(f"混雑度絞り込み後の推薦観光地数: {len(filtered_spots)} / {len(recommendation_spots)}")
+    return filtered_spots
+
+def filter_recommendations_by_weather(recommendations, weather_id):
+    """
+    天気条件に基づいて推薦観光地を絞り込む。
+
+    Parameters:
+        recommendations (list): 推薦観光地リスト。
+        weather_id (int): 判定された天気ID。Noneの場合、絞り込みを行わない。
+
+    Returns:
+        list: 絞り込み後の推薦観光地リスト。
+    """
+    if weather_id is None:
+        print("天気条件による絞り込みを行いません（任意の天気）。")
+        return recommendations  # 絞り込みなし
+
+    # 絞り込み処理
+    filtered = [spot for spot in recommendations if spot['weather'] == weather_id]
+
+    print(f"天気条件（ID: {weather_id}）による絞り込み後の推薦観光地数: {len(filtered)} / {len(recommendations)}")
+    return filtered
+
+def filter_recommendations_by_timezone(recommendations, timezone_id):
+    """
+    時間帯条件に基づいて推薦観光地を絞り込む。
+
+    Parameters:
+        recommendations (list): 推薦観光地リスト。
+        timezone_id (int): 判定された時間帯ID。Noneの場合、絞り込みを行わない。
+
+    Returns:
+        list: 絞り込み後の推薦観光地リスト。
+    """
+    if timezone_id is None:
+        print("時間帯条件による絞り込みを行いません（任意の時間帯）。")
+        return recommendations  # 絞り込みなし
+
+    # 絞り込み処理
+    filtered = [spot for spot in recommendations if spot['timezone'] == timezone_id]
+
+    print(f"時間帯条件（ID: {timezone_id}）による絞り込み後の推薦観光地数: {len(filtered)} / {len(recommendations)}")
+    return filtered
