@@ -1,1 +1,4 @@
 *.pyc
+.venv/
+flask_session/
+__pycache__/

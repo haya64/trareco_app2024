@@ -1,4 +1,3 @@
-# 観光地テーブル
 DROP TABLE IF EXISTS tourist_area;
 CREATE TABLE tourist_area (
 	tourist_id serial,
@@ -8,7 +7,9 @@ CREATE TABLE tourist_area (
 	latitude numeric(9,6),
 	season_id integer,
 	timezone_id integer,
-	category_id integer
+	category_id integer,
+	crowding numeric,
+	weather integer
 	);
 
 DROP TABLE IF EXISTS colorhistgram;
@@ -43,7 +44,12 @@ CREATE TABLE category (
 	category_id integer,
 	category TEXT
 	);
-	
+
+DROP TABLE IF EXISTS weather;
+CREATE TABLE weather (
+    weather_id	INT,
+    weather	TEXT
+);
 
 DROP TABLE IF EXISTS color2imp;
 CREATE TABLE color2imp (
@@ -85,7 +91,9 @@ CREATE TABLE return_tourist_area (
 	r_latitude numeric(9,6),
 	r_season_id integer,
 	r_timezone_id integer,
-	r_category_id integer
+	r_category_id integer,
+	r_crowding numeric,
+	r_weather integer
 	);
 
 DROP TABLE IF EXISTS return_colorhistgram;
