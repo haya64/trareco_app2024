@@ -93,7 +93,7 @@ CREATE TABLE return_tourist_area (
 	r_timezone_id integer,
 	r_category_id integer,
 	r_crowding numeric,
-	r_weather integer
+	r_weather_id integer
 	);
 
 DROP TABLE IF EXISTS return_colorhistgram;
