@@ -6,6 +6,8 @@ import random
 import numpy as np
 from collections import defaultdict
 import math
+from urllib.parse import unquote  # 追加
+
 
 
 # セッションに使用するシークレットキーを設定
@@ -110,6 +112,21 @@ def submit_selection():
         select = conect.SELECTDATA()
 
         try:
+            # 選択された画像情報を取得
+            selected_images_info = []
+            for image_id in selected_image_ids:
+                where = f'tourist_id = {image_id}'
+                columns = 'tourist_id, path'
+                table = 'tourist_area'
+                result = select.select(columns, table, where)
+                if result:
+                    decoded_path = f"images/{unquote(result[0][1])}"  # 'images/'ディレクトリを追加
+                    selected_images_info.append({'id': result[0][0], 'path': decoded_path})
+                    print(f"選択画像パス: {decoded_path}")  # デバッグ用出力
+                else:
+                    print(f"No image data found for ID: {image_id}")
+
+
             # 混雑度の平均値を計算して保存
             average_crowding = calculate_average_crowding(selected_image_ids, select)
             session['average_crowding'] = average_crowding
@@ -162,7 +179,7 @@ def submit_selection():
             print(f"推薦観光地: {recommend_spots}")
 
 
-            return render_template('trarecoapp/result.html', ranking=sorted_total_scores, recomend=recommend_spots)
+            return render_template('trarecoapp/result.html',selected_images=selected_images_info, ranking=sorted_total_scores, recomend=recommend_spots)
 
         finally:
             # SELECTDATA の接続をクローズ
@@ -200,7 +217,7 @@ def recommend_spot(
     select = conect.SELECTDATA()
     try:
         # 観光地情報を取得
-        columns = 'r_tourist_id, r_path, r_area_name, r_longitude, r_latitude, r_season_id, r_timezone_id, r_category_id, r_crowding, r_weather'
+        columns = 'r_tourist_id, r_path, r_area_name, r_longitude, r_latitude, r_season_id, r_timezone_id, r_category_id, r_crowding, r_weather_id'
         table = 'return_tourist_area'
         tourist_spots = select.select(columns, table)
 
@@ -244,7 +261,7 @@ def recommend_spot(
             {
                 'id': tourist_dict[tourist_id][0],
                 'name': tourist_dict[tourist_id][2],
-                'image_path': tourist_dict[tourist_id][1],
+                'image_path': tourist_dict[tourist_id][1] + ('.jpg' if not tourist_dict[tourist_id][1].endswith(('.jpg', '.png', '.jpeg')) else ''),
                 'longitude': tourist_dict[tourist_id][3],
                 'latitude': tourist_dict[tourist_id][4],
                 'crowding': tourist_dict[tourist_id][8],  # 混雑度
@@ -348,11 +365,11 @@ def calculate_user_to_spot_similarity(user_mood_vector, spot_mood_vector, spot_n
     spot_array = np.array([spot_mood_vector[key] for key in common_keys])
 
     # デバッグ用出力
-    print("=== デバッグ: 感性ベクトル比較 ===")
-    print(f"観光地: {spot_name}")
-    print(f"ユーザー感性ベクトル (共通): {user_array}")
-    print(f"観光地感性ベクトル (共通): {spot_array}")
-    print(f"共通の感性キー: {common_keys}")
+    # print("=== デバッグ: 感性ベクトル比較 ===")
+    # print(f"観光地: {spot_name}")
+    # print(f"ユーザー感性ベクトル (共通): {user_array}")
+    # print(f"観光地感性ベクトル (共通): {spot_array}")
+    # print(f"共通の感性キー: {common_keys}")
 
     # ユークリッド距離の計算
     distance = np.sqrt(np.sum((user_array - spot_array) ** 2))
@@ -361,9 +378,9 @@ def calculate_user_to_spot_similarity(user_mood_vector, spot_mood_vector, spot_n
     similarity = -distance  # 小さい距離を大きいスコアとして扱う
 
     # デバッグ用出力
-    print(f"計算されたユークリッド距離: {distance}")
-    print(f"類似度スコア (負の距離): {similarity}")
-    print("================================")
+    # print(f"計算されたユークリッド距離: {distance}")
+    # print(f"類似度スコア (負の距離): {similarity}")
+    # print("================================")
 
     return similarity
 

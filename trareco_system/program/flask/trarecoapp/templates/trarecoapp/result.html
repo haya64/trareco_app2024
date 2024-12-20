@@ -2,45 +2,56 @@
 
 {% block content %}
 <div class="container mt-4">
-    <div class="row">
-        <div class="col mx-auto">
-            <!-- 感性スコアの見出し -->
-            <h1 class="mb-4">あなたの感性</h1>
 
-            <!-- 感性スコアのリスト -->
-            <ul class="list-group">
-                {% for mood, score in ranking %}
-                <li class="list-group-item d-flex justify-content-between align-items-center">
-                    {{ loop.index }}. {{ mood }}
-                    <span class="badge bg-primary rounded-pill">{{ score }}</span>
-                </li>
-                {% endfor %}
-            </ul>
+    <!-- 選択された画像セクション -->
+    <section class="mb-5">
+        <h1 class="text-center mb-4">選択された画像</h1>
+        <div class="d-flex justify-content-center flex-wrap">
+            {% for image in selected_images %}
+            <div class="card m-2" style="width: 18rem;">
+                <img src="{{ url_for('static', filename=image.path) }}" alt="選択画像{{ image.id }}"
+                    class="card-img-top fixed-size-image">
+            </div>
+            {% endfor %}
+            {% for i in range(3 - selected_images|length) %}
+            <div class="card m-2" style="width: 18rem; height: 150px; background-color: #ffffff; border: none;"></div>
+            {% endfor %}
         </div>
-    </div>
-</div>
+    </section>
 
-<div class="container mt-4">
-    <div class="row">
-        <div class="col">
-            <h1>あなたの感性に合う観光地</h1>
-        </div>
-    </div>
-    <div class="row">
-        {% for spot in recomend %}
-        <div class="col-md-4">
-            <div class="card mb-4 shadow-sm">
-                <img src="{{ url_for('static', filename='return_images/' ~ spot.image_path) }}" alt="{{ spot.name }}"
-                    class="bd-placeholder-img card-img-top" width="100%" height="225">
-                <div class="card-body">
-                    <h5 class="card-title">{{ loop.index }}. {{ spot.name }}</h5>
-                    <p class="card-text">類似度スコア: {{ spot.score }}</p>
-                    <p class="card-text">移動時間: {{ spot.travel_time_hr }} 時間</p>
-                    <p class="card-text">距離: {{ spot.distance_km }} km</p>
+    <!-- あなたの感性セクション -->
+    <section class="mb-5">
+        <h1 class="text-center mb-4">あなたの感性</h1>
+        <ul class="list-group mx-auto" style="max-width: 600px;">
+            {% for mood, score in ranking %}
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                {{ loop.index }}. {{ mood }}
+                <span class="badge bg-primary rounded-pill">{{ score }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+
+    <!-- あなたの感性に合う観光地セクション -->
+    <section class="mb-5">
+        <h1 class="text-center mb-4">あなたの感性に合う観光地</h1>
+        <div class="row">
+            {% for spot in recomend %}
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <img src="{{ url_for('static', filename='return_images/' ~ spot.image_path) }}"
+                        alt="{{ spot.name }}" class="card-img-top fixed-size-image">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ loop.index }}. {{ spot.name }}</h5>
+                        <p class="card-text">類似度スコア: {{ spot.score }}</p>
+                        <p class="card-text">移動時間: {{ spot.travel_time_hr }} 時間</p>
+                        <p class="card-text">距離: {{ spot.distance_km }} km</p>
+                    </div>
                 </div>
             </div>
+            {% endfor %}
         </div>
-        {% endfor %}
-    </div>
+    </section>
+
 </div>
 {% endblock %}
